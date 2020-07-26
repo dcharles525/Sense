@@ -1,0 +1,12 @@
+I was just curious about how to find the raw sensor data, so I jotted some notes on my research, mostly do I don't forget what I've learned:
+
+In Linux it seems that the information needed for the temperature can be accessed from the linux kernel files in /sys/class/thermal/. If we look through the thermal_zone*/temp file we can get the degrees in millidegree celsius, which can be converted as needed. 
+
+If I run 'cat /sys/class/thermal/thermal_zone*/temp' I get a list of sensor info in millidegree celsius. to enhance the information some we can add identifiers to the data by running: paste <(cat /sys/class/thermal/thermal_zone*/type) <(cat /sys/│    illidegree celsius. to enhance the information some we can add identifiers to the dat
+class/thermal/thermal_zone*/temp) | column -s $'\t' -t | sed 's/\(.\)..$/.\1°C/'.
+
+So which piece of data should we pick? Well the acpitz sensors can often be terrible and or straight up not work. Its better to specifically use x86_pkg_temp (or your comps equiv) to get the most accurate temperature.
+
+With further research complete, we should use /sys/class/hwmon/* since it gives us a an actual name and identifies the cpu! So now all the work that has to be done is traversing the directories to get the cores and average them, then convert to C or F. From there a developer could decide what to do with that data, and it might be smart to expose this information in structs, rather than printing it via the console.
+
+We want to cover most chips, so we can just support pattern matching with https://www.kernel.org/doc/Documentation/hwmon/coretemp and https://www.kernel.org/doc/Documentation/hwmon/k10temp. 
