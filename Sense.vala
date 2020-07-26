@@ -78,7 +78,9 @@ public class Sense{
   * @return void
   */ 
   public void collect_data () {
-
+    
+    //clear array if collect_data is in a loop
+    this.temperature_struct.raw_data.set_size(0);
     double total_temperature = 0;
     int hwmon_counter = 0, temperature_counter = 1;
     bool hwmon_traversing = true, core_traversing = true;
@@ -141,7 +143,7 @@ public class Sense{
 
 /*
   
-  Example of how to handle the class.
+  //Example of how to handle the class.
 
   void main (string[] args) {
   
@@ -167,4 +169,5 @@ public class Sense{
 
   }
 
-}*/
+}
+*/
