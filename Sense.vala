@@ -1,8 +1,8 @@
 //============================================================+
 // File name   : Sense.vala
-// Last Update : 2020-7-26
+// Last Update : 2021-05-01
 //
-// Version: 0.0.1
+// Version: 0.1.0
 //
 // Description : This is a small abstraction layer for the /sys/class/hwmon/ modules in the linux kernel to extract 
 // temperature data. Our Temperature struct has an average_core_temp which is calculated within, and seemed to be a 
@@ -17,29 +17,29 @@
 public class Sense{
   
   public struct Core{
-    public string core_label;
-    public double current_temp;
+    public string coreLabel;
+    public double currentTemp;
   }
 
   public struct Temperature {
-    public string cpu_type; //coretemp (Intel) or k10temp (AMD)
-    public double average_core_temp;
-    public Array<Core?> raw_data; 
+    public string cpuType; //coretemp (Intel) or k10temp (AMD)
+    public double averageCoreTemp;
+    public Array<Core?> rawData; 
   }
 
-  public Temperature temperature_struct;
+  public Temperature temperatureStruct;
 
   public Sense () {
     
-    Array<Core?> core_array = new Array<Core?>();
+    Array<Core?> coreArray = new Array<Core?>();
 
-    temperature_struct = {
+    temperatureStruct = {
       "",
       0,
-      core_array
+      coreArray
     };
 
-    collect_data();
+    collectData ();
   
   }
   
@@ -51,7 +51,7 @@ public class Sense{
   * @param string filename
   * @return string
   */ 
-  private string open_file (string filename) {
+  private string openFile (string filename) {
 
     try {
       
@@ -77,97 +77,101 @@ public class Sense{
   *
   * @return void
   */ 
-  public void collect_data () {
+  public void collectData () {
     
     //clear array if collect_data is in a loop
-    this.temperature_struct.raw_data.set_size(0);
-    double total_temperature = 0;
-    int hwmon_counter = 0, temperature_counter = 1;
-    bool hwmon_traversing = true, core_traversing = true;
+    this.temperatureStruct.rawData.set_size (0);
+    double totalTemperature = 0;
+    int hwmonCounter = 0, temperatureCounter = 1;
+    bool hwmonTraversing = true, coreTraversing = true;
 
-    while (hwmon_traversing) {
+    while (hwmonTraversing) {
       
-      string path = "/sys/class/hwmon/hwmon".concat(hwmon_counter.to_string(),"/");
-      string hwmon_name_path = path.concat("name");
+      string path = "/sys/class/hwmon/hwmon".concat (hwmonCounter.to_string (),"/");
+      string hwmonNamePath = path.concat ("name");
 
-      if (FileUtils.test (hwmon_name_path, FileUtils.EXISTS)) {
+      if (!FileUtils.test (hwmonNamePath, FileUtils.EXISTS)) {
+
+        hwmonTraversing = false;
+        continue;
+
+      }
         
-        //Note we strip out newlines
-        string cpu_name = open_file (hwmon_name_path).replace("\n","");
+      //Note we strip out newlines
+      string cpuName = openFile (hwmonNamePath).replace ("\n","");
+      
+      //If we find either intel or amd chip
+      if (cpuName != "coretemp" && cpuName != "k10temp") {
+
+        hwmonCounter++;
+        continue;
+
+      }
+
+      this.temperatureStruct.cpuType = cpuName;
+
+      while (coreTraversing) {
         
-        //If we find either intel or amd chip
-        if (cpu_name == "coretemp" || cpu_name == "k10temp"){
+        string coreTemperaturePath = path.concat ("temp", temperatureCounter.to_string (), "_input");
+        string coreLabelPath = path.concat ("temp", temperatureCounter.to_string (), "_label");
 
-          this.temperature_struct.cpu_type = cpu_name;
+        if (!FileUtils.test (coreTemperaturePath, FileUtils.EXISTS)) {
 
-          while (core_traversing) {
-            
-            string core_temperature_path = path.concat("temp",temperature_counter.to_string(),"_input");
-            string core_label_path = path.concat("temp",temperature_counter.to_string(),"_label");
-
-            if (FileUtils.test (core_temperature_path, FileUtils.EXISTS)) {
-
-              double core_temperature = double.parse (open_file(core_temperature_path));
-              //Note we strip out newlines
-              string core_label = open_file(core_label_path).replace("\n","");
-            
-              total_temperature += core_temperature;
-              temperature_counter++;
-              
-              Core core = {
-                core_label,
-                core_temperature,
-              };
-
-              this.temperature_struct.raw_data.append_val (core);
-
-            } else 
-              core_traversing = false;
-
-          }
-          
-          //Gets the true average based on the data, seems to be fairly accurate.
-          this.temperature_struct.average_core_temp = total_temperature / (temperature_counter - 1);
+          coreTraversing = false;
+          continue;
 
         }
 
-        hwmon_counter++;
+        double coreTemperature = double.parse (openFile (coreTemperaturePath));
+        //Note we strip out newlines
+        string coreLabel = openFile (coreLabelPath).replace ("\n","");
+      
+        totalTemperature += coreTemperature;
+        temperatureCounter++;
+        
+        Core core = {
+          coreLabel,
+          coreTemperature,
+        };
 
-      }else 
-        hwmon_traversing = false;
+        this.temperatureStruct.rawData.append_val (core);
+
+      }
+      
+      //Gets the true average based on the data, seems to be fairly accurate.
+      this.temperatureStruct.averageCoreTemp = totalTemperature / (temperatureCounter - 1);
+      hwmonCounter++;
+
     }
 
   }
 
 }
+  
+//Example of how to handle the class.
 
-/*
-  
-  //Example of how to handle the class.
+void main (string[] args) {
 
-  void main (string[] args) {
+  Sense senseInstance = new Sense ();
   
-  Sense sense_instance = new Sense();
-  
-  string cpu_type = sense_instance.temperature_struct.cpu_type;
-  double raw_temperature = sense_instance.temperature_struct.average_core_temp;
-  double fahrenheit = (raw_temperature/1000) * (9.00/5.00) + 32;
+  string cpuType = senseInstance.temperatureStruct.cpuType;
+  double rawTemperature = senseInstance.temperatureStruct.averageCoreTemp;
+  double fahrenheit = (rawTemperature / 1000) * (9.00 / 5.00) + 32;
 
   stdout.printf ("%s \n", "|||||||||||||||||| CPU INFO |||||||||||||||||||||");
-  stdout.printf ("%s | %f \n", cpu_type, fahrenheit);
+  stdout.printf ("%s | %f \n", cpuType, fahrenheit);
 
   stdout.printf ("%s \n", "|||||||||||||||||| CORE INFO |||||||||||||||||||||");
 
-  for (int i = 0; i < sense_instance.temperature_struct.raw_data.length; i++) {
+  for (int i = 0; i < senseInstance.temperatureStruct.rawData.length; i++) {
   
-    string core_label = sense_instance.temperature_struct.raw_data.index(i).core_label;
-    double current_temperature = sense_instance.temperature_struct.raw_data.index(i).current_temp;
+    string coreLabel = senseInstance.temperatureStruct.rawData.index (i).coreLabel;
+    double currentTemperature = senseInstance.temperatureStruct.rawData.index (i).currentTemp;
     
-    current_temperature = (current_temperature/1000) * (9.00/5.00) + 32;
+    currentTemperature = (currentTemperature / 1000) * (9.00 / 5.00) + 32;
 
-    stdout.printf ("%s | Current: %f \n", core_label, current_temperature);
+    stdout.printf ("%s | Current: %f \n", coreLabel, currentTemperature);
 
   }
 
 }
-*/
